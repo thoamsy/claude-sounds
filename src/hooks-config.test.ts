@@ -115,3 +115,56 @@ describe("injectSoundHooks", () => {
     expect(result.hooks.Stop[1].hooks[0].command).not.toContain(".old")
   })
 })
+
+describe("removeSoundHooks", () => {
+  test("removes all sound hooks from settings", () => {
+    const settings = injectSoundHooks({})
+    const result = removeSoundHooks(settings)
+
+    // all events were sound-only, so hooks should be empty/undefined
+    expect(result.hooks).toBeUndefined()
+  })
+
+  test("preserves user hooks when removing sound hooks", () => {
+    const userHook = {
+      matcher: "Bash",
+      hooks: [{ type: "command", command: "echo hello" }],
+    }
+    const settings = {
+      hooks: {
+        PostToolUse: [userHook],
+        Stop: [
+          userHook,
+          { hooks: [{ type: "command", command: "afplay ~/.claude/sounds/stop.mp3" }] },
+        ],
+        SessionStart: [
+          { hooks: [{ type: "command", command: "afplay ~/.claude/sounds/session-start.mp3" }] },
+        ],
+      },
+    }
+    const result = removeSoundHooks(settings)
+
+    expect(result.hooks!.PostToolUse).toEqual([userHook])
+    expect(result.hooks!.Stop).toEqual([userHook])
+    expect(result.hooks!.SessionStart).toBeUndefined()
+  })
+
+  test("returns settings unchanged when no hooks exist", () => {
+    const settings = { env: { FOO: "1" } }
+    const result = removeSoundHooks(settings)
+
+    expect(result).toEqual(settings)
+  })
+
+  test("returns settings unchanged when no sound hooks present", () => {
+    const userHook = {
+      hooks: [{ type: "command", command: "echo test" }],
+    }
+    const settings = {
+      hooks: { Stop: [userHook] },
+    }
+    const result = removeSoundHooks(settings)
+
+    expect(result.hooks!.Stop).toEqual([userHook])
+  })
+})
