@@ -12,7 +12,10 @@ import type { HookName } from "./src/constants"
 
 const THEMES_DIR = join(homedir(), ".claude", THEMES_DIR_NAME)
 const SOUNDS_LINK = join(homedir(), ".claude", SOUNDS_LINK_NAME)
-const SETTINGS_PATH = join(homedir(), ".claude", "settings.json")
+const GLOBAL_SETTINGS_PATH = join(homedir(), ".claude", "settings.json")
+const PROJECT_SETTINGS_PATH = join(process.cwd(), ".claude", "settings.json")
+const REPO = "thoamsy/claude-sounds"
+const VERSION = require("./package.json").version as string
 
 async function getCurrentTheme(): Promise<string | null> {
   try {
@@ -79,10 +82,10 @@ async function cmdUse() {
   await switchTheme(theme)
   p.log.success(`Switched to ${pc.bold(theme)}`)
 
-  const settings = await readSettings()
+  const settings = await readSettings(GLOBAL_SETTINGS_PATH)
   if (!hasSoundHooks(settings)) {
     const updated = injectSoundHooks(settings)
-    await writeSettings(updated)
+    await writeSettings(GLOBAL_SETTINGS_PATH, updated)
     p.log.success("Sound hooks injected into settings.json")
   }
 }
@@ -284,31 +287,141 @@ async function cmdImport(zipPath?: string) {
   }
 }
 
-async function readSettings(): Promise<Record<string, unknown>> {
+async function readSettings(path: string): Promise<Record<string, unknown>> {
   try {
-    const text = await readFile(SETTINGS_PATH, "utf-8")
+    const text = await readFile(path, "utf-8")
     return JSON.parse(text)
   } catch {
     return {}
   }
 }
 
-async function writeSettings(settings: Record<string, unknown>) {
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n")
+async function writeSettings(path: string, settings: Record<string, unknown>) {
+  await mkdir(join(path, ".."), { recursive: true })
+  await writeFile(path, JSON.stringify(settings, null, 2) + "\n")
+}
+
+async function pickSettingsScope(): Promise<string | null> {
+  const scope = await p.select({
+    message: "Where to install hooks?",
+    options: [
+      { value: "global", label: "Global", hint: "~/.claude/settings.json — all projects" },
+      { value: "project", label: "This project", hint: ".claude/settings.json — current repo only" },
+    ],
+  })
+  if (p.isCancel(scope)) return null
+  return scope === "global" ? GLOBAL_SETTINGS_PATH : PROJECT_SETTINGS_PATH
 }
 
 async function cmdInit() {
-  const settings = await readSettings()
+  const settingsPath = await pickSettingsScope()
+  if (!settingsPath) return
+
+  const settings = await readSettings(settingsPath)
   const updated = injectSoundHooks(settings)
-  await writeSettings(updated)
-  p.log.success("Sound hooks injected into settings.json")
+  await writeSettings(settingsPath, updated)
+  p.log.success(`Sound hooks injected into ${pc.dim(settingsPath)}`)
 }
 
 async function cmdUninit() {
-  const settings = await readSettings()
+  const settingsPath = await pickSettingsScope()
+  if (!settingsPath) return
+
+  const settings = await readSettings(settingsPath)
   const updated = removeSoundHooks(settings)
-  await writeSettings(updated)
-  p.log.success("Sound hooks removed from settings.json")
+  await writeSettings(settingsPath, updated)
+  p.log.success(`Sound hooks removed from ${pc.dim(settingsPath)}`)
+}
+
+async function cmdUpdate() {
+  p.log.info(`Current version: ${pc.bold(VERSION)}`)
+
+  // Get latest version from GitHub redirect
+  const res = await fetch(`https://github.com/${REPO}/releases/latest`, { redirect: "manual" })
+  const location = res.headers.get("location")
+  if (!location) {
+    p.log.error("Failed to check for updates")
+    return
+  }
+  const latest = location.split("/").pop()!
+  const latestClean = latest.replace(/^v/, "")
+
+  if (latestClean === VERSION) {
+    p.log.success("Already up to date!")
+    return
+  }
+
+  p.log.info(`New version available: ${pc.bold(latest)}`)
+
+  const os = process.platform === "darwin" ? "darwin" : "linux"
+  const arch = process.arch === "arm64" ? "arm64" : "x64"
+  const binaryName = `claude-sounds-${os}-${arch}`
+  const url = `https://github.com/${REPO}/releases/download/${latest}/${binaryName}`
+
+  const spinner = p.spinner()
+  spinner.start("Downloading...")
+
+  const download = await fetch(url)
+  if (!download.ok) {
+    spinner.stop("Download failed")
+    // Try mirror
+    const mirrorUrl = `https://ghp.ci/${url}`
+    const mirror = await fetch(mirrorUrl)
+    if (!mirror.ok) {
+      p.log.error("Download failed from both GitHub and mirror")
+      return
+    }
+    const data = await mirror.arrayBuffer()
+    await installBinary(data, latest)
+    spinner.stop("Downloaded from mirror")
+  } else {
+    const data = await download.arrayBuffer()
+    spinner.stop("Downloaded")
+    await installBinary(data, latest)
+  }
+}
+
+async function installBinary(data: ArrayBuffer, version: string) {
+  const selfPath = process.execPath
+  const dir = join(selfPath, "..")
+  const backupPath = join(dir, `claude-sounds.${VERSION}.bak`)
+
+  // Backup current binary
+  try {
+    await copyFile(selfPath, backupPath)
+  } catch {}
+
+  // Write new binary
+  const tmpfile = join(dir, ".claude-sounds-update")
+  await Bun.write(tmpfile, data)
+
+  const result = Bun.spawnSync(["chmod", "+x", tmpfile])
+  if (result.exitCode !== 0) {
+    p.log.error("Failed to set permissions")
+    return
+  }
+
+  // macOS: codesign
+  if (process.platform === "darwin") {
+    Bun.spawnSync(["codesign", "--force", "--sign", "-", tmpfile], { stderr: "ignore" })
+  }
+
+  // Replace self
+  try {
+    await unlink(selfPath)
+    const { rename } = await import("fs/promises")
+    await rename(tmpfile, selfPath)
+  } catch {
+    // Might need sudo
+    const mv = Bun.spawnSync(["sudo", "mv", tmpfile, selfPath])
+    if (mv.exitCode !== 0) {
+      p.log.error("Failed to install update. Try running with sudo.")
+      return
+    }
+  }
+
+  p.log.success(`Updated to ${pc.bold(version)}`)
+  p.log.info(`Previous version backed up to ${pc.dim(backupPath)}`)
 }
 
 async function cmdPreview() {
@@ -349,6 +462,11 @@ async function main() {
   if (command === "import") return cmdImport(args[1])
   if (command === "init") return cmdInit()
   if (command === "uninit") return cmdUninit()
+  if (command === "update") return cmdUpdate()
+  if (command === "--version" || command === "-v") {
+    console.log(VERSION)
+    return
+  }
   if (command === "current") {
     const current = await getCurrentTheme()
     console.log(current ?? "No active theme")
@@ -374,6 +492,7 @@ async function main() {
       { value: "import", label: "Import theme", hint: "from zip file" },
       { value: "init", label: "Setup hooks", hint: "inject sound hooks into settings.json" },
       { value: "uninit", label: "Remove hooks", hint: "remove sound hooks from settings.json" },
+      { value: "update", label: "Update", hint: `current: v${VERSION}` },
     ],
   })
 
@@ -406,6 +525,9 @@ async function main() {
       break
     case "uninit":
       await cmdUninit()
+      break
+    case "update":
+      await cmdUpdate()
       break
   }
 
