@@ -14,7 +14,6 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            target: bun-darwin-arm64
             artifact: claude-sounds-darwin-arm64
           - os: ubuntu-latest
             target: bun-linux-x64
@@ -33,11 +32,7 @@ jobs:
       - run: bun install
 
       - name: Build binary
-        run: bun build ./index.ts --compile --target=${{ matrix.target }} --outfile ${{ matrix.artifact }}
-
-      - name: Ad-hoc codesign (macOS)
-        if: runner.os == 'macOS'
-        run: codesign --force --sign - ${{ matrix.artifact }}
+        run: bun build ./index.ts --compile ${{ matrix.target && format('--target={0}', matrix.target) }} --outfile ${{ matrix.artifact }}
 
       - uses: actions/upload-artifact@v4
         with:
