@@ -7,7 +7,7 @@ import { join, basename, extname, resolve } from "path"
 import { homedir } from "os"
 import { $ } from "bun"
 import { HOOK_NAMES, HOOK_LABELS, THEMES_DIR_NAME, SOUNDS_LINK_NAME } from "./src/constants"
-import { injectSoundHooks, removeSoundHooks } from "./src/hooks-config"
+import { injectSoundHooks, removeSoundHooks, hasSoundHooks } from "./src/hooks-config"
 import type { HookName } from "./src/constants"
 
 const THEMES_DIR = join(homedir(), ".claude", THEMES_DIR_NAME)
@@ -78,6 +78,13 @@ async function cmdUse() {
 
   await switchTheme(theme)
   p.log.success(`Switched to ${pc.bold(theme)}`)
+
+  const settings = await readSettings()
+  if (!hasSoundHooks(settings)) {
+    const updated = injectSoundHooks(settings)
+    await writeSettings(updated)
+    p.log.success("Sound hooks injected into settings.json")
+  }
 }
 
 async function cmdEdit() {
@@ -267,6 +274,13 @@ async function cmdImport(zipPath?: string) {
   if (!p.isCancel(switchNow) && switchNow) {
     await switchTheme(themeName)
     p.log.success(`Switched to ${pc.bold(themeName)}`)
+
+    const settings = await readSettings()
+    if (!hasSoundHooks(settings)) {
+      const updated = injectSoundHooks(settings)
+      await writeSettings(updated)
+      p.log.success("Sound hooks injected into settings.json")
+    }
   }
 }
 

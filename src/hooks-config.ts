@@ -49,6 +49,13 @@ export function injectSoundHooks(settings: Settings): Settings {
   return { ...settings, hooks }
 }
 
+export function hasSoundHooks(settings: Settings): boolean {
+  if (!settings.hooks) return false
+  return Object.values(settings.hooks).some((groups) =>
+    groups.some((g) => isSoundHook(g))
+  )
+}
+
 export function removeSoundHooks(settings: Settings): Settings {
   if (!settings.hooks) return settings
 
