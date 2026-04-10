@@ -1,6 +1,9 @@
+
 # claude-sounds
 
 Sound themes for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Get audio feedback on session start, task completion, errors, and more.
+
+https://github.com/user-attachments/assets/9ce150d4-6577-489b-a363-6182cc0d36ad
 
 ## Install
 
