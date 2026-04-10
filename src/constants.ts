@@ -10,6 +10,7 @@ export const HOOK_NAMES = [
   "error",
   "subagent-stop",
   "notification",
+  "config-change",
 ] as const
 
 export type HookName = (typeof HOOK_NAMES)[number]
@@ -22,6 +23,7 @@ export const HOOK_LABELS: Record<HookName, string> = {
   error: "Error (PostToolUseFailure / StopFailure / PermissionDenied)",
   "subagent-stop": "SubagentStop",
   notification: "Notification",
+  "config-change": "ConfigChange",
 }
 
 export const SOUND_TO_EVENTS: Record<HookName, string[]> = {
@@ -32,6 +34,7 @@ export const SOUND_TO_EVENTS: Record<HookName, string[]> = {
   error: ["PostToolUseFailure", "StopFailure", "PermissionDenied"],
   "subagent-stop": ["SubagentStop"],
   notification: ["Notification"],
+  "config-change": ["ConfigChange"],
 }
 
 export const ALL_SOUND_EVENTS = Object.values(SOUND_TO_EVENTS).flat()

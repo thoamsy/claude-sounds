@@ -11,14 +11,11 @@ curl -fsSL https://raw.githubusercontent.com/thoamsy/claude-sounds/main/install.
 ## Setup
 
 ```bash
-# Inject sound hooks into Claude Code settings
-claude-sounds init
-
-# Import a theme from zip
+# Import a theme and start using it (hooks are injected automatically)
 claude-sounds import theme.zip
 
-# Switch between themes
-claude-sounds use
+# Or set up hooks manually
+claude-sounds init
 ```
 
 ## Commands
@@ -38,13 +35,18 @@ Run `claude-sounds` without arguments for interactive mode.
 
 ## Sound events
 
-- **SessionStart** - session begins
-- **Stop** - agent stops
-- **PermissionRequest** - permission prompt
-- **TaskCompleted** - task done
-- **Error** - tool failure / permission denied
-- **SubagentStop** - subagent finishes
-- **Notification** - notification
+| Event | Trigger |
+|-------|---------|
+| **SessionStart** | Session begins |
+| **Stop** | Agent stops |
+| **PermissionRequest** | Permission prompt appears |
+| **TaskCompleted** | Task done |
+| **Error** | Tool failure / permission denied |
+| **SubagentStop** | Subagent finishes |
+| **Notification** | Notification |
+| **ConfigChange** | Settings file changes (e.g. theme switch) |
+
+Missing sound files are silently skipped, so not every theme needs all events.
 
 ## Theme structure
 
@@ -59,6 +61,9 @@ Themes live in `~/.claude/sound-themes/{name}/`. Each theme is a folder of audio
   error.mp3
   subagent-stop.mp3
   notification.mp3
+  config-change.mp3    # optional
 ```
+
+Any audio format supported by `afplay` works (mp3, wav, aiff, etc.).
 
 Share themes by exporting as zip (`claude-sounds export`) and importing on another machine.
