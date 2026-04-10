@@ -24,22 +24,15 @@ esac
 target="${os}-${arch}"
 echo "Detected platform: ${target}"
 
-# Fetch latest release tag
+# Download binary — use "latest" redirect to skip API rate limits
 if [ -n "${VERSION:-}" ]; then
-  tag="$VERSION"
+  url="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${target}"
+  echo "Installing ${BINARY_NAME} ${VERSION}..."
 else
-  tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d '"' -f 4)"
+  url="https://github.com/${REPO}/releases/latest/download/${BINARY_NAME}-${target}"
+  echo "Installing ${BINARY_NAME} (latest)..."
 fi
 
-if [ -z "$tag" ]; then
-  echo "Failed to determine latest version"
-  exit 1
-fi
-
-echo "Installing ${BINARY_NAME} ${tag}..."
-
-# Download binary
-url="https://github.com/${REPO}/releases/download/${tag}/${BINARY_NAME}-${target}"
 tmpfile="$(mktemp)"
 curl -fsSL -o "$tmpfile" "$url"
 chmod +x "$tmpfile"
