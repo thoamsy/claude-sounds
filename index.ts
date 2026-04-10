@@ -6,31 +6,11 @@ import { readdir, readlink, symlink, unlink, copyFile, stat, mkdir } from "fs/pr
 import { join, basename, extname, resolve } from "path"
 import { homedir } from "os"
 import { $ } from "bun"
+import { HOOK_NAMES, HOOK_LABELS, THEMES_DIR_NAME, SOUNDS_LINK_NAME } from "./src/constants"
+import type { HookName } from "./src/constants"
 
-const THEMES_DIR = join(homedir(), ".claude", "sound-themes")
-const SOUNDS_LINK = join(homedir(), ".claude", "sounds")
-
-const HOOK_NAMES = [
-  "session-start",
-  "stop",
-  "permission-request",
-  "task-completed",
-  "error",
-  "subagent-stop",
-  "notification",
-] as const
-
-type HookName = (typeof HOOK_NAMES)[number]
-
-const HOOK_LABELS: Record<HookName, string> = {
-  "session-start": "SessionStart",
-  stop: "Stop",
-  "permission-request": "PermissionRequest",
-  "task-completed": "TaskCompleted",
-  error: "Error (PostToolUseFailure / StopFailure / PermissionDenied)",
-  "subagent-stop": "SubagentStop",
-  notification: "Notification",
-}
+const THEMES_DIR = join(homedir(), ".claude", THEMES_DIR_NAME)
+const SOUNDS_LINK = join(homedir(), ".claude", SOUNDS_LINK_NAME)
 
 async function getCurrentTheme(): Promise<string | null> {
   try {
