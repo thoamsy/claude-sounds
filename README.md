@@ -10,11 +10,22 @@ brew install thoamsy/tap/claude-sounds
 
 ## Setup
 
-```bash
-# Import a theme and start using it (hooks are injected automatically)
-claude-sounds import theme.zip
+> **Note:** claude-sounds does not ship with any built-in themes. You need to provide your own `.zip` theme file before running `import`.
 
-# Or set up hooks manually (global or per-project)
+Download a sample theme to get started:
+
+- [duolingo.zip](https://github.com/thoamsy/claude-sounds/releases/download/v0.2.0/duolingo.zip) — Duolingo-style sounds
+- [meme.zip](https://github.com/thoamsy/claude-sounds/releases/download/v0.2.0/meme.zip) — Meme sound effects
+
+Or create your own (see [Theme structure](#theme-structure) below).
+
+```bash
+# Import a downloaded theme
+claude-sounds import ~/Downloads/duolingo.zip
+
+# Or create a theme manually, then set up hooks
+# 1. Put your audio files in ~/.claude/sound-themes/my-theme/
+# 2. Run init to inject hooks
 claude-sounds init
 ```
 
