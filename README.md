@@ -5,7 +5,7 @@ Sound themes for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thoamsy/claude-sounds/main/install.sh | bash
+brew install thoamsy/tap/claude-sounds
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/thoamsy/claude-sounds/main/install.
 # Import a theme and start using it (hooks are injected automatically)
 claude-sounds import theme.zip
 
-# Or set up hooks manually
+# Or set up hooks manually (global or per-project)
 claude-sounds init
 ```
 
@@ -22,7 +22,7 @@ claude-sounds init
 
 | Command | Description |
 |---------|-------------|
-| `init` | Inject sound hooks into `~/.claude/settings.json` |
+| `init` | Inject sound hooks (global or per-project) |
 | `uninit` | Remove sound hooks |
 | `use` | Switch active theme |
 | `edit` | Replace individual sounds in current theme |
@@ -30,6 +30,7 @@ claude-sounds init
 | `preview` | Preview a sound |
 | `export` | Export theme as zip to `~/Downloads` |
 | `import` | Import theme from zip |
+| `version` | Print current version |
 
 Run `claude-sounds` without arguments for interactive mode.
 
