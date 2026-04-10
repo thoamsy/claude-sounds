@@ -2,6 +2,8 @@
 
 Sound themes for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Get audio feedback on session start, task completion, errors, and more.
 
+https://github.com/thoamsy/claude-sounds/releases/download/v0.2.0/ClaudeSoundsDemo.mp4
+
 ## Install
 
 ```bash
