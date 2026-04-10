@@ -32,3 +32,18 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# IDE
+.cursor
+.vscode
+
+# Local dev notes
+docs/superpowers
+
+# Sound files (themes are user data, not source)
+*.mp3
+*.wav
+*.aiff
+*.ogg
+*.m4a
+*.flac

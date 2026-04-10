@@ -2,9 +2,12 @@
   "name": "claude-sounds",
   "module": "index.ts",
   "type": "module",
-  "private": true,
   "bin": {
     "claude-sounds": "index.ts"
+  },
+  "scripts": {
+    "build": "bun build ./index.ts --compile --outfile dist/claude-sounds",
+    "build:all": "bun run scripts/build-all.sh"
   },
   "devDependencies": {
     "@types/bun": "latest"

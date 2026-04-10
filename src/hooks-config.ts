@@ -28,7 +28,7 @@ function makeSoundHookGroup(soundFile: string): HookGroup {
     hooks: [
       {
         type: "command",
-        command: `afplay ${SOUND_MARKER}${soundFile}`,
+        command: `afplay ${SOUND_MARKER}${soundFile}.* 2>/dev/null || true`,
       },
     ],
   }
