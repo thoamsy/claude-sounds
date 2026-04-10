@@ -24,17 +24,21 @@ esac
 target="${os}-${arch}"
 echo "Detected platform: ${target}"
 
-# Download binary — use "latest" redirect to skip API rate limits
+# Build download URL
 if [ -n "${VERSION:-}" ]; then
-  url="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${target}"
+  path="${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${target}"
   echo "Installing ${BINARY_NAME} ${VERSION}..."
 else
-  url="https://github.com/${REPO}/releases/latest/download/${BINARY_NAME}-${target}"
+  path="${REPO}/releases/latest/download/${BINARY_NAME}-${target}"
   echo "Installing ${BINARY_NAME} (latest)..."
 fi
 
+# Try GitHub directly, fall back to mirror for regions with connectivity issues
 tmpfile="$(mktemp)"
-curl -fsSL -o "$tmpfile" "$url"
+if ! curl -fsSL --connect-timeout 10 -o "$tmpfile" "https://github.com/${path}" 2>/dev/null; then
+  echo "GitHub download failed, trying mirror..."
+  curl -fsSL -o "$tmpfile" "https://ghp.ci/https://github.com/${path}"
+fi
 chmod +x "$tmpfile"
 
 # Install
@@ -45,6 +49,6 @@ else
   sudo mv "$tmpfile" "${INSTALL_DIR}/${BINARY_NAME}"
 fi
 
-echo "Installed ${BINARY_NAME} ${tag} to ${INSTALL_DIR}/${BINARY_NAME}"
+echo "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 echo ""
 echo "Run 'claude-sounds init' to set up sound hooks in Claude Code."
