@@ -41,6 +41,11 @@ if ! curl -fsSL --connect-timeout 10 -o "$tmpfile" "https://github.com/${path}" 
 fi
 chmod +x "$tmpfile"
 
+# Remove macOS quarantine flag (unsigned binary gets killed otherwise)
+if [ "$OS" = "Darwin" ]; then
+  xattr -d com.apple.quarantine "$tmpfile" 2>/dev/null || true
+fi
+
 # Install
 if [ -w "$INSTALL_DIR" ]; then
   mv "$tmpfile" "${INSTALL_DIR}/${BINARY_NAME}"
