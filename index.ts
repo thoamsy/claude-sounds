@@ -2,15 +2,17 @@
 
 import * as p from "@clack/prompts"
 import pc from "picocolors"
-import { readdir, readlink, symlink, unlink, copyFile, stat, mkdir } from "fs/promises"
+import { readdir, readlink, symlink, unlink, copyFile, stat, mkdir, readFile, writeFile } from "fs/promises"
 import { join, basename, extname, resolve } from "path"
 import { homedir } from "os"
 import { $ } from "bun"
 import { HOOK_NAMES, HOOK_LABELS, THEMES_DIR_NAME, SOUNDS_LINK_NAME } from "./src/constants"
+import { injectSoundHooks, removeSoundHooks } from "./src/hooks-config"
 import type { HookName } from "./src/constants"
 
 const THEMES_DIR = join(homedir(), ".claude", THEMES_DIR_NAME)
 const SOUNDS_LINK = join(homedir(), ".claude", SOUNDS_LINK_NAME)
+const SETTINGS_PATH = join(homedir(), ".claude", "settings.json")
 
 async function getCurrentTheme(): Promise<string | null> {
   try {
@@ -268,6 +270,33 @@ async function cmdImport(zipPath?: string) {
   }
 }
 
+async function readSettings(): Promise<Record<string, unknown>> {
+  try {
+    const text = await readFile(SETTINGS_PATH, "utf-8")
+    return JSON.parse(text)
+  } catch {
+    return {}
+  }
+}
+
+async function writeSettings(settings: Record<string, unknown>) {
+  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n")
+}
+
+async function cmdInit() {
+  const settings = await readSettings()
+  const updated = injectSoundHooks(settings)
+  await writeSettings(updated)
+  p.log.success("Sound hooks injected into settings.json")
+}
+
+async function cmdUninit() {
+  const settings = await readSettings()
+  const updated = removeSoundHooks(settings)
+  await writeSettings(updated)
+  p.log.success("Sound hooks removed from settings.json")
+}
+
 async function cmdPreview() {
   const current = await getCurrentTheme()
   if (!current) {
@@ -304,6 +333,8 @@ async function main() {
   if (command === "preview") return cmdPreview()
   if (command === "export") return cmdExport(args[1])
   if (command === "import") return cmdImport(args[1])
+  if (command === "init") return cmdInit()
+  if (command === "uninit") return cmdUninit()
   if (command === "current") {
     const current = await getCurrentTheme()
     console.log(current ?? "No active theme")
@@ -327,6 +358,8 @@ async function main() {
       { value: "list", label: "List all themes" },
       { value: "export", label: "Export theme", hint: "zip to ~/Downloads" },
       { value: "import", label: "Import theme", hint: "from zip file" },
+      { value: "init", label: "Setup hooks", hint: "inject sound hooks into settings.json" },
+      { value: "uninit", label: "Remove hooks", hint: "remove sound hooks from settings.json" },
     ],
   })
 
@@ -353,6 +386,12 @@ async function main() {
       break
     case "import":
       await cmdImport()
+      break
+    case "init":
+      await cmdInit()
+      break
+    case "uninit":
+      await cmdUninit()
       break
   }
 
