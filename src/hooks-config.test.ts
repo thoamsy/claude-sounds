@@ -5,17 +5,18 @@ describe("injectSoundHooks", () => {
   test("adds hooks to empty settings (no hooks key)", () => {
     const settings = {}
     const result = injectSoundHooks(settings)
+    const hooks = result.hooks!
 
-    expect(result.hooks).toBeDefined()
-    expect(result.hooks.Stop).toBeArrayOfSize(1)
-    expect(result.hooks.Stop[0].hooks[0].command).toContain("~/.claude/sounds/stop")
-    expect(result.hooks.SessionStart).toBeArrayOfSize(1)
-    expect(result.hooks.PostToolUseFailure).toBeArrayOfSize(1)
-    expect(result.hooks.StopFailure).toBeArrayOfSize(1)
-    expect(result.hooks.PermissionDenied).toBeArrayOfSize(1)
-    expect(result.hooks.PostToolUseFailure[0].hooks[0].command).toContain("error")
-    expect(result.hooks.StopFailure[0].hooks[0].command).toContain("error")
-    expect(result.hooks.PermissionDenied[0].hooks[0].command).toContain("error")
+    expect(hooks).toBeDefined()
+    expect(hooks.Stop).toBeArrayOfSize(1)
+    expect(hooks.Stop![0]!.hooks[0]!.command).toContain("play-sound.sh stop")
+    expect(hooks.SessionStart).toBeArrayOfSize(1)
+    expect(hooks.PostToolUseFailure).toBeArrayOfSize(1)
+    expect(hooks.StopFailure).toBeArrayOfSize(1)
+    expect(hooks.PermissionDenied).toBeArrayOfSize(1)
+    expect(hooks.PostToolUseFailure![0]!.hooks[0]!.command).toContain("error")
+    expect(hooks.StopFailure![0]!.hooks[0]!.command).toContain("error")
+    expect(hooks.PermissionDenied![0]!.hooks[0]!.command).toContain("error")
   })
 
   test("adds hooks when hooks object exists but target events are missing", () => {
@@ -30,10 +31,12 @@ describe("injectSoundHooks", () => {
       },
     }
     const result = injectSoundHooks(settings)
+    const hooks = result.hooks!
 
-    expect(result.hooks.PostToolUse).toEqual(settings.hooks.PostToolUse)
-    expect(result.hooks.Stop).toBeArrayOfSize(1)
-    expect(result.hooks.SessionStart).toBeArrayOfSize(1)
+    expect(hooks.PostToolUse).toBeArrayOfSize(2)
+    expect(hooks.PostToolUse![0]).toEqual(settings.hooks.PostToolUse[0])
+    expect(hooks.Stop).toBeArrayOfSize(1)
+    expect(hooks.SessionStart).toBeArrayOfSize(1)
   })
 
   test("preserves existing user hooks on same event and appends sound hook", () => {
@@ -46,20 +49,22 @@ describe("injectSoundHooks", () => {
       },
     }
     const result = injectSoundHooks(settings)
+    const hooks = result.hooks!
 
-    expect(result.hooks.Stop).toBeArrayOfSize(2)
-    expect(result.hooks.Stop[0]).toEqual(userHook)
-    expect(result.hooks.Stop[1].hooks[0].command).toContain("~/.claude/sounds/stop")
+    expect(hooks.Stop).toBeArrayOfSize(2)
+    expect(hooks.Stop![0]).toEqual(userHook)
+    expect(hooks.Stop![1]!.hooks[0]!.command).toContain("play-sound.sh stop")
   })
 
   test("is idempotent — does not duplicate sound hooks on repeated calls", () => {
     const settings = {}
     const first = injectSoundHooks(settings)
     const second = injectSoundHooks(first)
+    const hooks = second.hooks!
 
-    expect(second.hooks.Stop).toBeArrayOfSize(1)
-    expect(second.hooks.SessionStart).toBeArrayOfSize(1)
-    expect(second.hooks.PostToolUseFailure).toBeArrayOfSize(1)
+    expect(hooks.Stop).toBeArrayOfSize(1)
+    expect(hooks.SessionStart).toBeArrayOfSize(1)
+    expect(hooks.PostToolUseFailure).toBeArrayOfSize(1)
   })
 
   test("updates existing sound hooks if already present (idempotent replace)", () => {
@@ -75,9 +80,10 @@ describe("injectSoundHooks", () => {
       },
     }
     const result = injectSoundHooks(settings)
+    const hooks = result.hooks!
 
-    expect(result.hooks.Stop).toBeArrayOfSize(1)
-    expect(result.hooks.Stop[0].hooks[0].command).toContain("~/.claude/sounds/stop")
+    expect(hooks.Stop).toBeArrayOfSize(1)
+    expect(hooks.Stop![0]!.hooks[0]!.command).toContain("play-sound.sh stop")
   })
 
   test("preserves non-hooks settings fields", () => {
@@ -108,11 +114,12 @@ describe("injectSoundHooks", () => {
       },
     }
     const result = injectSoundHooks(settings)
+    const hooks = result.hooks!
 
-    expect(result.hooks.Stop).toBeArrayOfSize(2)
-    expect(result.hooks.Stop[0]).toEqual(userHook)
-    expect(result.hooks.Stop[1].hooks[0].command).toContain("~/.claude/sounds/stop")
-    expect(result.hooks.Stop[1].hooks[0].command).not.toContain(".old")
+    expect(hooks.Stop).toBeArrayOfSize(2)
+    expect(hooks.Stop![0]).toEqual(userHook)
+    expect(hooks.Stop![1]!.hooks[0]!.command).toContain("play-sound.sh stop")
+    expect(hooks.Stop![1]!.hooks[0]!.command).not.toContain(".old")
   })
 })
 
@@ -147,6 +154,40 @@ describe("removeSoundHooks", () => {
     expect(result.hooks!.PostToolUse).toEqual([userHook])
     expect(result.hooks!.Stop).toEqual([userHook])
     expect(result.hooks!.SessionStart).toBeUndefined()
+  })
+
+  test("removeSoundHooks cleans up old afplay-format hooks", () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              { type: "command", command: "afplay ~/.claude/sounds/stop.* 2>/dev/null || true" },
+            ],
+          },
+        ],
+      },
+    }
+
+    const result = removeSoundHooks(settings)
+    expect(result.hooks).toBeUndefined()
+  })
+
+  test("removeSoundHooks cleans up new play-sound.sh-format hooks", () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              { type: "command", command: "bash ~/.claude/play-sound.sh stop 2>/dev/null || true" },
+            ],
+          },
+        ],
+      },
+    }
+
+    const result = removeSoundHooks(settings)
+    expect(result.hooks).toBeUndefined()
   })
 
   test("returns settings unchanged when no hooks exist", () => {

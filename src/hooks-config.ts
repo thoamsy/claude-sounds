@@ -1,4 +1,4 @@
-import { SOUND_TO_EVENTS, SOUND_MARKER } from "./constants"
+import { PLAY_SCRIPT_MARKER, SOUND_MARKER, SOUND_TO_EVENTS } from "./constants"
 
 interface HookCommand {
   type: string
@@ -20,7 +20,9 @@ interface Settings {
 }
 
 function isSoundHook(group: HookGroup): boolean {
-  return group.hooks.some((h) => h.command.includes(SOUND_MARKER))
+  return group.hooks.some(
+    (h) => h.command.includes(SOUND_MARKER) || h.command.includes(PLAY_SCRIPT_MARKER)
+  )
 }
 
 function makeSoundHookGroup(soundFile: string): HookGroup {
@@ -28,7 +30,7 @@ function makeSoundHookGroup(soundFile: string): HookGroup {
     hooks: [
       {
         type: "command",
-        command: `afplay ${SOUND_MARKER}${soundFile}.* 2>/dev/null || true`,
+        command: `bash ${PLAY_SCRIPT_MARKER} ${soundFile} 2>/dev/null || true`,
       },
     ],
   }

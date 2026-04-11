@@ -39,7 +39,7 @@ claude-sounds init
 | `init` | Inject sound hooks (global or per-project) |
 | `uninit` | Remove sound hooks |
 | `use` | Switch active theme |
-| `edit` | Replace individual sounds in current theme |
+| `edit` | Replace sounds or manage variants (supports file and folder drag) |
 | `list` | List all themes and their sounds |
 | `preview` | Preview a sound |
 | `export` | Export theme as zip to `~/Downloads` |
@@ -53,11 +53,18 @@ Run `claude-sounds` without arguments for interactive mode.
 | Event | Trigger |
 |-------|---------|
 | **SessionStart** | Session begins |
-| **Stop** | Agent stops |
+| **SessionEnd** | Session exits |
+| **Stop** | Agent stops (per-turn) |
 | **PermissionRequest** | Permission prompt appears |
 | **TaskCompleted** | Task done |
 | **Error** | Tool failure / permission denied |
+| **PostToolUse** | Tool call succeeds |
+| **SubagentStart** | Subagent spawns |
 | **SubagentStop** | Subagent finishes |
+| **PreCompact** | Context compaction starts |
+| **PostCompact** | Context compaction finishes |
+| **WorktreeCreate** | Worktree created |
+| **WorktreeRemove** | Worktree removed |
 | **Notification** | Notification |
 | **ConfigChange** | Settings file changes (e.g. theme switch) |
 
@@ -71,14 +78,23 @@ Themes live in `~/.claude/sound-themes/{name}/`. Each theme is a folder of audio
 ~/.claude/sound-themes/my-theme/
   session-start.mp3
   stop.mp3
-  permission-request.mp3
-  task-completed.mp3
   error.mp3
-  subagent-stop.mp3
-  notification.mp3
-  config-change.mp3    # optional
+  ...
 ```
 
-Any audio format supported by `afplay` works (mp3, wav, aiff, etc.).
+To add random variants for an event, use a directory instead of a single file:
+
+```
+~/.claude/sound-themes/my-theme/
+  stop/
+    coin.mp3
+    ding.mp3
+    chime.mp3
+  error.mp3
+```
+
+When a directory is present, a random variant is played each time (non-repeating within a session). You can mix single files and variant directories in the same theme.
+
+Any audio format supported by `afplay` works (mp3, wav, aiff, m4a, aac, flac, etc.).
 
 Share themes by exporting as zip (`claude-sounds export`) and importing on another machine.

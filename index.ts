@@ -2,18 +2,35 @@
 
 import * as p from "@clack/prompts"
 import pc from "picocolors"
-import { readdir, readlink, symlink, unlink, copyFile, stat, mkdir, readFile, writeFile } from "fs/promises"
-import { join, basename, extname, resolve } from "path"
+import { copyFile, mkdir, readFile, readdir, readlink, rm, stat, symlink, unlink, writeFile } from "fs/promises"
 import { homedir } from "os"
-import { HOOK_NAMES, HOOK_LABELS, THEMES_DIR_NAME, SOUNDS_LINK_NAME } from "./src/constants"
-import { injectSoundHooks, removeSoundHooks, hasSoundHooks } from "./src/hooks-config"
+import { basename, extname, join, resolve } from "path"
+import { HOOK_LABELS, HOOK_NAMES, SOUNDS_LINK_NAME, THEMES_DIR_NAME } from "./src/constants"
 import type { HookName } from "./src/constants"
+import { hasSoundHooks, injectSoundHooks, removeSoundHooks } from "./src/hooks-config"
+import { PLAY_SOUND_SCRIPT } from "./src/play-script"
 
 const THEMES_DIR = join(homedir(), ".claude", THEMES_DIR_NAME)
 const SOUNDS_LINK = join(homedir(), ".claude", SOUNDS_LINK_NAME)
 const GLOBAL_SETTINGS_PATH = join(homedir(), ".claude", "settings.json")
 const PROJECT_SETTINGS_PATH = join(process.cwd(), ".claude", "settings.json")
+const PLAY_SCRIPT_PATH = join(homedir(), ".claude", "play-sound.sh")
 const VERSION = require("./package.json").version as string
+
+type SoundInfo =
+  | { type: "file"; filename: string }
+  | { type: "directory"; variants: string[] }
+
+function cleanPath(raw: string): string {
+  return raw.trim().replace(/\\ /g, " ").replace(/^['"]|['"]$/g, "")
+}
+
+function soundInfoHint(name: string, info: SoundInfo | undefined): string {
+  if (!info) return pc.dim("(missing)")
+  return info.type === "file"
+    ? info.filename
+    : `${name}/ (${info.variants.length} variants)`
+}
 
 async function getCurrentTheme(): Promise<string | null> {
   try {
@@ -27,21 +44,44 @@ async function getCurrentTheme(): Promise<string | null> {
 async function getThemes(): Promise<string[]> {
   try {
     const entries = await readdir(THEMES_DIR, { withFileTypes: true })
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name)
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   } catch {
     return []
   }
 }
 
-async function getThemeSounds(theme: string): Promise<Map<string, string>> {
+async function getThemeSounds(theme: string): Promise<Map<string, SoundInfo>> {
   const dir = join(THEMES_DIR, theme)
-  const entries = await readdir(dir)
-  const map = new Map<string, string>()
-  for (const entry of entries) {
-    const name = basename(entry, extname(entry))
-    map.set(name, entry)
+  const entries = await readdir(dir, { withFileTypes: true })
+  const sounds = new Map<string, SoundInfo>()
+
+  const dirEntries = entries.filter((entry) => entry.isDirectory())
+  const variantResults = await Promise.all(
+    dirEntries.map(async (entry) => {
+      const variants = (await readdir(join(dir, entry.name), { withFileTypes: true }))
+        .filter((file) => file.isFile())
+        .map((file) => file.name)
+        .sort()
+      return { name: entry.name, variants }
+    })
+  )
+
+  for (const { name, variants } of variantResults) {
+    if (variants.length > 0) {
+      sounds.set(name, { type: "directory", variants })
+    }
   }
-  return map
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+
+    const name = basename(entry.name, extname(entry.name))
+    if (!sounds.has(name)) {
+      sounds.set(name, { type: "file", filename: entry.name })
+    }
+  }
+
+  return sounds
 }
 
 async function switchTheme(theme: string) {
@@ -58,6 +98,12 @@ async function preview(filePath: string) {
   Bun.spawn(["afplay", filePath])
 }
 
+async function ensurePlayScript() {
+  const existing = await Bun.file(PLAY_SCRIPT_PATH).text().catch(() => null)
+  if (existing === PLAY_SOUND_SCRIPT) return
+  await writeFile(PLAY_SCRIPT_PATH, PLAY_SOUND_SCRIPT, { mode: 0o755 })
+}
+
 async function cmdUse() {
   const themes = await getThemes()
   const current = await getCurrentTheme()
@@ -69,9 +115,9 @@ async function cmdUse() {
 
   const theme = await p.select({
     message: "Switch to which theme?",
-    options: themes.map((t) => ({
-      value: t,
-      label: t === current ? `${t} ${pc.dim("(current)")}` : t,
+    options: themes.map((entry) => ({
+      value: entry,
+      label: entry === current ? `${entry} ${pc.dim("(current)")}` : entry,
     })),
   })
 
@@ -82,10 +128,60 @@ async function cmdUse() {
 
   const settings = await readSettings(GLOBAL_SETTINGS_PATH)
   if (!hasSoundHooks(settings)) {
+    await ensurePlayScript()
     const updated = injectSoundHooks(settings)
     await writeSettings(GLOBAL_SETTINGS_PATH, updated)
     p.log.success("Sound hooks injected into settings.json")
   }
+}
+
+type PromptPathResult =
+  | { type: "file"; path: string }
+  | { type: "directory"; path: string; files: string[] }
+
+async function promptPath(): Promise<PromptPathResult | null> {
+  const input = await p.text({
+    message: "Sound file or folder path (drag here)",
+    validate: (value) => {
+      if (!cleanPath(value ?? "")) return "Path is required"
+    },
+  })
+
+  if (p.isCancel(input)) return null
+
+  const resolvedPath = resolve(cleanPath(input as string))
+
+  let info: Awaited<ReturnType<typeof stat>>
+  try {
+    info = await stat(resolvedPath)
+  } catch {
+    p.log.error(`Not found: ${resolvedPath}`)
+    return null
+  }
+
+  if (info.isDirectory()) {
+    const files = (await readdir(resolvedPath, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort()
+
+    if (files.length === 0) {
+      p.log.error("Folder is empty")
+      return null
+    }
+
+    p.log.info(`Found ${files.length} files: ${pc.dim(files.join(", "))}`)
+    return { type: "directory", path: resolvedPath, files }
+  }
+
+  const shouldPreview = await p.confirm({ message: "Preview?" })
+  if (!p.isCancel(shouldPreview) && shouldPreview) {
+    await preview(resolvedPath)
+    const keep = await p.confirm({ message: "Use this sound?" })
+    if (p.isCancel(keep) || !keep) return null
+  }
+
+  return { type: "file", path: resolvedPath }
 }
 
 async function cmdEdit() {
@@ -95,68 +191,145 @@ async function cmdEdit() {
     return
   }
 
-  const sounds = await getThemeSounds(current)
+  const themeDir = join(THEMES_DIR, current)
+  let sounds = await getThemeSounds(current)
 
   p.log.info(`Editing theme: ${pc.bold(current)}`)
 
   let continueEditing = true
   while (continueEditing) {
-    const hookNames = await p.multiselect({
-      message: "Select hooks to replace (space to select)",
+    const hookChoice = await p.select({
+      message: "Select hook to edit",
       options: HOOK_NAMES.map((name) => ({
         value: name,
         label: HOOK_LABELS[name],
-        hint: sounds.get(name) ?? pc.dim("(missing)"),
+        hint: soundInfoHint(name, sounds.get(name)),
       })),
-      required: true,
     })
 
-    if (p.isCancel(hookNames)) return
+    if (p.isCancel(hookChoice)) return
 
-    const filePath = await p.text({
-      message: "Sound file path (drag file here)",
-      validate: (v) => {
-        const cleaned = v.trim().replace(/\\ /g, " ").replace(/^['"]|['"]$/g, "")
-        if (!cleaned) return "Path is required"
-      },
-    })
+    const hookName = hookChoice as HookName
+    const info = sounds.get(hookName)
 
-    if (p.isCancel(filePath)) return
+    if (info?.type === "directory") {
+      const actionChoice = await p.select({
+        message: `${hookName}/ has ${info.variants.length} variants:`,
+        options: [
+          { value: "add", label: "Add variant" },
+          { value: "remove", label: "Remove variant" },
+          { value: "replace", label: "Replace all", hint: "remove folder, set single file" },
+        ],
+      })
 
-    const cleaned = (filePath as string)
-      .trim()
-      .replace(/\\ /g, " ")
-      .replace(/^['"]|['"]$/g, "")
-    const resolvedPath = resolve(cleaned)
+      if (p.isCancel(actionChoice)) return
 
-    try {
-      await stat(resolvedPath)
-    } catch {
-      p.log.error(`File not found: ${resolvedPath}`)
-      continue
-    }
+      const action = actionChoice as "add" | "remove" | "replace"
+      if (action === "add") {
+        const result = await promptPath()
+        if (!result) continue
 
-    const shouldPreview = await p.confirm({ message: "Preview?" })
-    if (!p.isCancel(shouldPreview) && shouldPreview) {
-      await preview(resolvedPath)
-      const keep = await p.confirm({ message: "Use this sound?" })
-      if (p.isCancel(keep) || !keep) continue
-    }
+        const destDir = join(themeDir, hookName)
+        if (result.type === "directory") {
+          await Promise.all(
+            result.files.map((file) => copyFile(join(result.path, file), join(destDir, file)))
+          )
+          p.log.success(`Added ${result.files.length} variants to ${pc.dim(`${hookName}/`)}`)
+        } else {
+          const ext = extname(result.path)
+          const name = basename(result.path, ext)
+          await copyFile(result.path, join(destDir, `${name}${ext}`))
+          p.log.success(`Added variant ${pc.dim(`${hookName}/${name}${ext}`)}`)
+        }
+      } else if (action === "remove") {
+        const variantChoice = await p.select({
+          message: "Remove which variant?",
+          options: info.variants.map((variant) => ({ value: variant, label: variant })),
+        })
 
-    const ext = extname(resolvedPath)
-    const themeDir = join(THEMES_DIR, current)
-    for (const hookName of hookNames as HookName[]) {
-      const oldFile = sounds.get(hookName)
-      if (oldFile && extname(oldFile) !== ext) {
-        try {
-          await unlink(join(themeDir, oldFile))
-        } catch {}
+        if (p.isCancel(variantChoice)) continue
+
+        const variant = variantChoice as string
+        await unlink(join(themeDir, hookName, variant))
+        p.log.success(`Removed ${pc.dim(`${hookName}/${variant}`)}`)
+      } else {
+        const result = await promptPath()
+        if (!result) continue
+
+        await rm(join(themeDir, hookName), { recursive: true, force: true })
+
+        if (result.type === "directory") {
+          const destDir = join(themeDir, hookName)
+          await mkdir(destDir, { recursive: true })
+          await Promise.all(
+            result.files.map((file) => copyFile(join(result.path, file), join(destDir, file)))
+          )
+          p.log.success(`Replaced with ${result.files.length} variants in ${pc.dim(`${hookName}/`)}`)
+        } else {
+          const ext = extname(result.path)
+          await copyFile(result.path, join(themeDir, `${hookName}${ext}`))
+          p.log.success(`Replaced with single file ${pc.dim(`${hookName}${ext}`)}`)
+        }
       }
-      const newFileName = `${hookName}${ext}`
-      await copyFile(resolvedPath, join(themeDir, newFileName))
-      sounds.set(hookName, newFileName)
-      p.log.success(`${HOOK_LABELS[hookName]} -> ${pc.dim(newFileName)}`)
+    } else {
+      const actionChoice = await p.select({
+        message: info ? `${hookName} is a single file (${info.filename})` : `${hookName} is missing`,
+        options: [
+          { value: "replace", label: "Replace file" },
+          { value: "add-variant", label: "Add variant", hint: "convert to folder with multiple sounds" },
+        ],
+      })
+
+      if (p.isCancel(actionChoice)) return
+
+      const result = await promptPath()
+      if (!result) continue
+
+      const action = actionChoice as "replace" | "add-variant"
+      if (action === "replace") {
+        if (result.type === "directory") {
+          if (info) {
+            try { await unlink(join(themeDir, info.filename)) } catch {}
+          }
+          const destDir = join(themeDir, hookName)
+          await mkdir(destDir, { recursive: true })
+          await Promise.all(
+            result.files.map((file) => copyFile(join(result.path, file), join(destDir, file)))
+          )
+          p.log.success(`Replaced with ${result.files.length} variants in ${pc.dim(`${hookName}/`)}`)
+        } else {
+          const ext = extname(result.path)
+          if (info && extname(info.filename) !== ext) {
+            try { await unlink(join(themeDir, info.filename)) } catch {}
+          }
+          const newFileName = `${hookName}${ext}`
+          await copyFile(result.path, join(themeDir, newFileName))
+          p.log.success(`${HOOK_LABELS[hookName]} -> ${pc.dim(newFileName)}`)
+        }
+      } else {
+        const eventDir = join(themeDir, hookName)
+        await mkdir(eventDir, { recursive: true })
+
+        if (info) {
+          await copyFile(join(themeDir, info.filename), join(eventDir, info.filename))
+          await unlink(join(themeDir, info.filename))
+        }
+
+        if (result.type === "directory") {
+          await Promise.all(
+            result.files.map((file) => copyFile(join(result.path, file), join(eventDir, file)))
+          )
+          p.log.success(`Converted to folder with ${result.files.length} variants`)
+        } else {
+          const ext = extname(result.path)
+          const name = basename(result.path, ext)
+          await copyFile(result.path, join(eventDir, `${name}${ext}`))
+          p.log.success("Converted to folder with variants")
+        }
+      }
     }
+
+    sounds = await getThemeSounds(current)
 
     const next = await p.confirm({ message: "Edit more?" })
     continueEditing = !p.isCancel(next) && next
@@ -174,12 +347,16 @@ async function cmdList() {
 
     const sounds = await getThemeSounds(theme)
     for (const hookName of HOOK_NAMES) {
-      const file = sounds.get(hookName)
+      const info = sounds.get(hookName)
       const label = `  ${HOOK_LABELS[hookName]}`
-      if (file) {
-        p.log.message(`${pc.dim(label)}: ${file}`)
-      } else {
+      if (!info) {
         p.log.message(`${pc.dim(label)}: ${pc.yellow("(missing)")}`)
+      } else if (info.type === "file") {
+        p.log.message(`${pc.dim(label)}: ${info.filename}`)
+      } else {
+        p.log.message(
+          `${pc.dim(label)}: ${pc.cyan(`${hookName}/`)} ${pc.dim(`(${info.variants.length} variants: ${info.variants.join(", ")})`)}`
+        )
       }
     }
   }
@@ -201,7 +378,8 @@ async function cmdExport(themeName?: string) {
   const themeDir = join(THEMES_DIR, name)
   const outPath = join(homedir(), "Downloads", `${name}.zip`)
 
-  const result = Bun.spawnSync(["zip", "-j", outPath, ...((await readdir(themeDir)).map((f) => join(themeDir, f)))], {
+  const result = Bun.spawnSync(["zip", "-r", outPath, "."], {
+    cwd: themeDir,
     stderr: "pipe",
   })
 
@@ -218,16 +396,15 @@ async function cmdImport(zipPath?: string) {
   if (!inputPath) {
     const result = await p.text({
       message: "Zip file path (drag file here)",
-      validate: (v) => {
-        if (!v.trim()) return "Path is required"
+      validate: (value) => {
+        if (!(value ?? "").trim()) return "Path is required"
       },
     })
     if (p.isCancel(result)) return
     inputPath = result as string
   }
 
-  const cleaned = inputPath.trim().replace(/\\ /g, " ").replace(/^['"]|['"]$/g, "")
-  const resolved = resolve(cleaned)
+  const resolved = resolve(cleanPath(inputPath))
 
   try {
     await stat(resolved)
@@ -278,6 +455,7 @@ async function cmdImport(zipPath?: string) {
 
     const settings = await readSettings(GLOBAL_SETTINGS_PATH)
     if (!hasSoundHooks(settings)) {
+      await ensurePlayScript()
       const updated = injectSoundHooks(settings)
       await writeSettings(GLOBAL_SETTINGS_PATH, updated)
       p.log.success("Sound hooks injected into settings.json")
@@ -315,6 +493,7 @@ async function cmdInit() {
   const settingsPath = await pickSettingsScope()
   if (!settingsPath) return
 
+  await ensurePlayScript()
   const settings = await readSettings(settingsPath)
   const updated = injectSoundHooks(settings)
   await writeSettings(settingsPath, updated)
@@ -341,19 +520,42 @@ async function cmdPreview() {
   const sounds = await getThemeSounds(current)
   const themeDir = join(THEMES_DIR, current)
 
-  const hookName = await p.select({
+  const hookChoice = await p.select({
     message: "Preview which sound?",
     options: HOOK_NAMES.filter((name) => sounds.has(name)).map((name) => ({
       value: name,
       label: HOOK_LABELS[name],
-      hint: sounds.get(name),
+      hint: soundInfoHint(name, sounds.get(name)),
     })),
   })
 
-  if (p.isCancel(hookName)) return
+  if (p.isCancel(hookChoice)) return
 
-  const file = sounds.get(hookName)!
-  await preview(join(themeDir, file))
+  const hookName = hookChoice as HookName
+  const info = sounds.get(hookName)!
+
+  if (info.type === "file") {
+    await preview(join(themeDir, info.filename))
+    p.log.info(`Playing ${info.filename}...`)
+    return
+  }
+
+  const variantChoice = await p.select({
+    message: `${info.variants.length} variants available:`,
+    options: [
+      { value: "__random__", label: "Random", hint: "pick one at random" },
+      ...info.variants.map((variant) => ({ value: variant, label: variant })),
+    ],
+  })
+
+  if (p.isCancel(variantChoice)) return
+
+  const file =
+    variantChoice === "__random__"
+      ? info.variants[Math.floor(Math.random() * info.variants.length)]!
+      : (variantChoice as string)
+
+  await preview(join(themeDir, hookName, file))
   p.log.info(`Playing ${file}...`)
 }
 
@@ -379,7 +581,6 @@ async function main() {
     return
   }
 
-  // interactive mode
   p.intro(pc.bgCyan(pc.black(" claude-sounds ")))
 
   const current = await getCurrentTheme()
