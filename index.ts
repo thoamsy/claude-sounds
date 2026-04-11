@@ -98,10 +98,11 @@ async function preview(filePath: string) {
   Bun.spawn(["afplay", filePath])
 }
 
-async function ensurePlayScript() {
+async function ensurePlayScript(): Promise<boolean> {
   const existing = await Bun.file(PLAY_SCRIPT_PATH).text().catch(() => null)
-  if (existing === PLAY_SOUND_SCRIPT) return
+  if (existing === PLAY_SOUND_SCRIPT) return false
   await writeFile(PLAY_SCRIPT_PATH, PLAY_SOUND_SCRIPT, { mode: 0o755 })
+  return true
 }
 
 async function cmdUse() {
@@ -126,7 +127,7 @@ async function cmdUse() {
   await switchTheme(theme)
   p.log.success(`Switched to ${pc.bold(theme)}`)
 
-  await ensurePlayScript()
+  if (await ensurePlayScript()) p.log.info("play-sound.sh updated")
   const settings = await readSettings(GLOBAL_SETTINGS_PATH)
   if (!hasSoundHooks(settings)) {
     const updated = injectSoundHooks(settings)
@@ -453,7 +454,7 @@ async function cmdImport(zipPath?: string) {
     await switchTheme(themeName)
     p.log.success(`Switched to ${pc.bold(themeName)}`)
 
-    await ensurePlayScript()
+    if (await ensurePlayScript()) p.log.info("play-sound.sh updated")
     const settings = await readSettings(GLOBAL_SETTINGS_PATH)
     if (!hasSoundHooks(settings)) {
       const updated = injectSoundHooks(settings)
@@ -493,7 +494,7 @@ async function cmdInit() {
   const settingsPath = await pickSettingsScope()
   if (!settingsPath) return
 
-  await ensurePlayScript()
+  if (await ensurePlayScript()) p.log.info("play-sound.sh updated")
   const settings = await readSettings(settingsPath)
   const updated = injectSoundHooks(settings)
   await writeSettings(settingsPath, updated)
