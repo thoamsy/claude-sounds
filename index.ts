@@ -126,9 +126,9 @@ async function cmdUse() {
   await switchTheme(theme)
   p.log.success(`Switched to ${pc.bold(theme)}`)
 
+  await ensurePlayScript()
   const settings = await readSettings(GLOBAL_SETTINGS_PATH)
   if (!hasSoundHooks(settings)) {
-    await ensurePlayScript()
     const updated = injectSoundHooks(settings)
     await writeSettings(GLOBAL_SETTINGS_PATH, updated)
     p.log.success("Sound hooks injected into settings.json")
@@ -453,9 +453,9 @@ async function cmdImport(zipPath?: string) {
     await switchTheme(themeName)
     p.log.success(`Switched to ${pc.bold(themeName)}`)
 
+    await ensurePlayScript()
     const settings = await readSettings(GLOBAL_SETTINGS_PATH)
     if (!hasSoundHooks(settings)) {
-      await ensurePlayScript()
       const updated = injectSoundHooks(settings)
       await writeSettings(GLOBAL_SETTINGS_PATH, updated)
       p.log.success("Sound hooks injected into settings.json")
