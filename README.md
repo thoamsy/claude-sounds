@@ -17,6 +17,7 @@ brew install thoamsy/tap/claude-sounds
 
 Download a sample theme to get started:
 
+- [silk-song.zip](https://github.com/thoamsy/claude-sounds/releases/download/v0.3.0/silk-song.zip) — Hollow Knight: Silk Song sounds
 - [duolingo.zip](https://github.com/thoamsy/claude-sounds/releases/download/v0.2.0/duolingo.zip) — Duolingo-style sounds
 - [meme.zip](https://github.com/thoamsy/claude-sounds/releases/download/v0.2.0/meme.zip) — Meme sound effects
 
