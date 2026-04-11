@@ -42,7 +42,8 @@ docs/superpowers
 
 # Claude Code local config
 .agents
-.claude
+.claude/*
+!.claude/skills
 skills-lock.json
 
 # Local tools & scripts

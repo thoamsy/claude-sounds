@@ -1,111 +1,37 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+## Project
 
-## APIs
+claude-sounds is a macOS CLI tool that adds sound themes to Claude Code hooks. It injects hook commands into `~/.claude/settings.json` that invoke a bash script (`~/.claude/play-sound.sh`) to play audio via `afplay`.
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
+**macOS only** — uses `afplay` for audio playback. Do not add cross-platform support or suggest alternative audio players.
+
+## Bun
+
+Use Bun exclusively. Never use Node.js, npm, yarn, pnpm, vite, or dotenv.
+
+- `bun <file>` to run, `bun test` to test, `bun install` to install
+- `bunx <pkg>` instead of `npx`
 - Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- Prefer `Bun.spawn`/`Bun.spawnSync` over execa
 
-## Testing
+## Commands
 
-Use `bun test` to run tests.
+- **Test:** `bun test`
+- **Build:** `bun build ./index.ts --compile --outfile dist/claude-sounds`
+- **Run dev:** `bun index.ts`
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+## Architecture
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
+- `index.ts` — main CLI entrypoint (interactive prompts via @clack/prompts, colors via picocolors)
+- `src/constants.ts` — hook names, event mappings (`SOUND_TO_EVENTS`), labels
+- `src/hooks-config.ts` — inject/remove/detect sound hooks in settings.json
+- `src/play-script.ts` — bash script string for playing sounds (supports single files and variant directories with non-repeating shuffle)
 
-## Frontend
-
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+Key concepts:
+- **Themes** live in `~/.claude/sound-themes/{name}/`, active theme is a symlink at `~/.claude/sounds/`
+- **Variant directories** — a hook can have a folder of audio files instead of a single file; the bash script plays them randomly without repeating within a session
+- **Hook injection** — `injectSoundHooks()` writes hook entries into settings.json that call `bash ~/.claude/play-sound.sh <event-name>`
+- One sound name can map to multiple Claude Code events (e.g., `"error"` → `PostToolUseFailure`, `StopFailure`, `PermissionDenied`)
