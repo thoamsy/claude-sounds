@@ -44,5 +44,9 @@ else
   afplay "\$SOUNDS_DIR/\$EVENT".* 2>/dev/null
 fi
 
+if [ "\$EVENT" = "session-end" ]; then
+  rm -f "\$STATE_DIR/claude-sounds-\$PPID-"* 2>/dev/null
+fi
+
 exit 0
 `
