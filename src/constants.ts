@@ -1,6 +1,7 @@
 export const THEMES_DIR_NAME = "sound-themes"
 export const SOUNDS_LINK_NAME = "sounds"
 export const SOUND_MARKER = "~/.claude/sounds/"
+export const PLAY_SCRIPT_MARKER = "~/.claude/play-sound.sh"
 
 export const HOOK_NAMES = [
   "session-start",
