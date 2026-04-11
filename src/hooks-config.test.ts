@@ -33,7 +33,8 @@ describe("injectSoundHooks", () => {
     const result = injectSoundHooks(settings)
     const hooks = result.hooks!
 
-    expect(hooks.PostToolUse).toEqual(settings.hooks.PostToolUse)
+    expect(hooks.PostToolUse).toBeArrayOfSize(2)
+    expect(hooks.PostToolUse![0]).toEqual(settings.hooks.PostToolUse[0])
     expect(hooks.Stop).toBeArrayOfSize(1)
     expect(hooks.SessionStart).toBeArrayOfSize(1)
   })
