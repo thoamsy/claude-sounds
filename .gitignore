@@ -40,6 +40,17 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Local dev notes
 docs/superpowers
 
+# Claude Code local config
+.agents
+.claude
+skills-lock.json
+
+# Local tools & scripts
+tools
+
+# Video assets
+video
+
 # Sound files (themes are user data, not source)
 *.mp3
 *.wav
