@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -24,7 +24,7 @@ jobs:
     needs: release
     steps:
       - name: Update homebrew formula
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           script: |
