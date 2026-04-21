@@ -105,6 +105,8 @@ async function ensurePlayScript(): Promise<boolean> {
   return true
 }
 
+const OFF_VALUE = "__off__"
+
 async function cmdUse() {
   const themes = await getThemes()
   const current = await getCurrentTheme()
@@ -114,23 +116,44 @@ async function cmdUse() {
     return
   }
 
+  const globalSettings = await readSettings(GLOBAL_SETTINGS_PATH)
+  const soundsOff = !hasSoundHooks(globalSettings)
+
   const theme = await p.select({
     message: "Switch to which theme?",
-    options: themes.map((entry) => ({
-      value: entry,
-      label: entry === current ? `${entry} ${pc.dim("(current)")}` : entry,
-    })),
+    options: [
+      ...themes.map((entry) => ({
+        value: entry,
+        label: entry === current && !soundsOff ? `${entry} ${pc.dim("(current)")}` : entry,
+      })),
+      { value: "__divider__", label: `\x1b[2D  ${pc.dim("─────────────")}`, disabled: true },
+      {
+        value: OFF_VALUE,
+        label: soundsOff ? `Off ${pc.dim("(current)")}` : "Off",
+        hint: "disable sounds (remove hooks)",
+      },
+    ],
   })
 
   if (p.isCancel(theme)) return
+
+  if (theme === OFF_VALUE) {
+    if (soundsOff) {
+      p.log.info("Sounds are already off")
+      return
+    }
+    const updated = removeSoundHooks(globalSettings)
+    await writeSettings(GLOBAL_SETTINGS_PATH, updated)
+    p.log.success("Sounds off (hooks removed from settings.json)")
+    return
+  }
 
   await switchTheme(theme)
   p.log.success(`Switched to ${pc.bold(theme)}`)
 
   if (await ensurePlayScript()) p.log.info("play-sound.sh updated")
-  const settings = await readSettings(GLOBAL_SETTINGS_PATH)
-  if (!hasSoundHooks(settings)) {
-    const updated = injectSoundHooks(settings)
+  if (soundsOff) {
+    const updated = injectSoundHooks(globalSettings)
     await writeSettings(GLOBAL_SETTINGS_PATH, updated)
     p.log.success("Sound hooks injected into settings.json")
   }
